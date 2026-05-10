@@ -1,0 +1,148 @@
+NASA RANDOMIZED & RECOMMISSIONED BATTERY DATASET - QUALITY SCORING CODE
+========================================================================
+
+CODE OVERVIEW
+-------------
+This Python script evaluates the quality of the NASA Randomized Battery Dataset
+using a 6-criterion scoring system. It generates a comprehensive quality
+scorecard with grades ranging from "Fully Satisfied (++)" to "Not Satisfied (-)".
+
+PURPOSE
+-------
+- Translate quantitative findings into a quality scorecard
+- Assess dataset against 6 quality criteria
+- Generate visual scorecard and detailed justifications
+- Run after nasa_explore.py using same data loading pipeline
+
+INPUT REQUIREMENTS
+------------------
+- Dataset path: C:\Users\admin\Desktop\DR2\11 All Datasets\02 NASA Randomized Battery Dataset\battery_alt_dataset\regular_alt_batteries
+- CSV files named "battery*.csv"
+- Expected columns: time, mode, voltage_charger, voltage_load, current, temperature_battery, temperature_mosfet, temperature_resistor, mission_type
+
+OUTPUTS
+-------
+- Console output: Detailed scorecard with justifications
+- Plot file: 06_quality_scorecard.png (saved to exploration_outputs folder)
+- Score distribution summary
+
+SCORING CRITERIA (6 Categories)
+-------------------------------
+1. CORRECTNESS
+   - 1a: Physical plausibility (voltage ranges, temperature limits)
+   - 1b: Current sign convention (mode field authority)
+
+2. COMPLETENESS
+   - 2a: Missing timestamps/logging gaps
+   - 2b: Null/NaN values analysis
+
+3. ANOMALY MINIMIZATION
+   - 3a: Statistical outliers (IQR method on temperature, voltage, current)
+   - 3b: Unexpected/abrupt signal changes
+   - 3c: High-frequency noise level
+
+4. REPRESENTATIVENESS & DIVERSITY
+   - 4a: Operating conditions coverage
+   - 4b: Temperature setpoints diversity
+   - 4c: C-rate diversity
+   - 4d: Partial cycle presence
+   - 4e: Partial DoD profiles
+   - 4f: Dynamic load profiles
+   - 4g: Calendar aging inclusion
+   - 4h: Replicate cells per condition
+
+5. BALANCED DISTRIBUTION
+   - 5a: SOH range coverage (State of Health from 0 to 1)
+   - 5b: Balanced SOH distribution across bins
+   - 5c: Balanced cycle contribution per battery
+
+6. TEMPORAL COHERENCE
+   - 6a: Monotonic cycle index/timestamps
+   - 6b: Channel synchronization
+   - 6c: Strictly increasing timestamps
+   - 6d: Consistent degradation trend
+
+KEY DATASET FACTS (from exploration)
+------------------------------------
+- Pack-level voltages: 2S pack (4.0-7.30V range)
+- current_load always POSITIVE (load-board convention)
+- mode field (-1/0/1) indicates charge/discharge direction
+- NaN values in load columns during non-discharge = by design
+- temperature_battery has anomalies: -116°C to +109°C
+- 72 different fast-charging policies
+- No calendar aging protocol (cyclic aging only)
+- Mission type distinguishes reference vs dynamic discharge
+
+PHYSICAL LIMITS (Predefined)
+---------------------------
+- Pack voltage: 4.0-7.30V (2S with LFP cells: 2.0-3.65V per cell)
+- Temperature: -20°C to +60°C (operating bounds)
+- Nominal capacity: 1.1 Ah
+
+DATA PROCESSING STEPS
+---------------------
+1. Load and concatenate all battery CSV files
+2. Map columns to standardized names
+3. Convert numeric columns
+4. Compute per-cycle capacity using numerical integration (trapezoidal rule)
+5. Calculate State of Health (SOH) = capacity / reference capacity
+6. Identify masks for discharge, rest, and charge modes
+7. Apply scoring criteria with justifications
+8. Generate visual heatmap scorecard
+
+SCORING SCHEME
+--------------
+++ : Fully Satisfied  (Dark green)
++  : Mostly Satisfied (Light green)
+o  : Partially Satisfied (Orange)
+-  : Not Satisfied    (Red)
+N/A: Not Applicable   (Light blue)
+
+KEY FINDINGS SUMMARY
+--------------------
+- Physical plausibility: Mostly satisfied (minor temp sensor anomalies)
+- Current sign convention: Fully satisfied (well-defined mode field)
+- Timestamps: Mostly satisfied (gaps only at cycle boundaries)
+- Null values: Fully satisfied (structural NaNs by design)
+- Outliers: Mostly satisfied (temp anomalies main concern)
+- Signal changes: Partially satisfied (expected at boundaries)
+- Noise level: Not satisfied (unfiltered raw data)
+- Operating conditions: Fully satisfied (72 charging policies)
+- Temperature diversity: Fully satisfied (varies across packs)
+- C-rate diversity: Fully satisfied (4.0-19.0A range)
+- Partial cycles: Partially satisfied (some truncated cycles)
+- Partial DoD: Not satisfied (always 100% DoD)
+- Dynamic loads: Fully satisfied (random profiles included)
+- Calendar aging: Not satisfied (none present)
+- Replicates: Fully satisfied (2-3 packs per condition)
+- SOH range: Mostly satisfied (0.4-1.0 coverage)
+- SOH distribution: Partially satisfied (skewed to higher values)
+- Cycle balance: Mostly satisfied (CV shows intentional variation)
+- Temporal coherence: Mostly satisfied to fully satisfied
+
+TECHNICAL DETAILS
+-----------------
+- Capacity calculation: np.trapz(current, time) / 3600.0
+- IQR outlier detection: Q1-3*IQR to Q3+3*IQR
+- Gap detection: >5× median sampling interval
+- SOH bins: [<0.70, 0.70-0.80, 0.80-0.90, >0.90]
+- EOL threshold: SOH < 0.80
+- CV (coefficient of variation) for cycle distribution
+
+DEPENDENCIES
+------------
+- os, glob, warnings
+- numpy
+- pandas
+- matplotlib.pyplot
+
+OUTPUT FILES
+------------
+- 06_quality_scorecard.png: Visual heatmap scorecard with colored scoring blocks
+- Console includes detailed justifications for each criterion
+
+NOTE
+----
+This script assumes nasa_explore.py has been run previously or the dataset
+is accessible at the specified path. The code reuses the same loading logic
+to ensure consistency between exploration findings and quality scoring.
