@@ -1,0 +1,276 @@
+CALCE BATTERY DATASET QUALITY SCORING LOGIC
+============================================
+
+OVERVIEW
+--------
+The scoring system evaluates the CALCE Battery Dataset against 6 quality criteria,
+each with specific aspects relevant to this dataset. Scores range from "++" (Fully Satisfied) 
+to "-" (Not Satisfied), with "N/A" for non-applicable checks.
+
+Dataset context: 7 LCO (Lithium Cobalt Oxide) prismatic cells tested under identical conditions:
+25°C temperature, 0.5C charge/discharge, 0-100% DoD, cycled until 80% capacity fade.
+Dataset includes cycle-level summaries with small data footprint.
+
+SCORING THRESHOLDS & LOGIC
+==========================
+
+1. CORRECTNESS (Physical plausibility + data integrity)
+-------------------------------------------------------
+
+1a. Physical plausibility (voltage, capacity): ++/+/-
+    - Voltage bounds: 2.5-4.2V (standard LCO operating range)
+    - Capacity bounds: 0.8-1.5 Ah (typical for these LCO prismatic cells)
+    - Calculates % of measurements outside physical limits
+    - Score "++" when <0.1% outliers (excellent)
+    - Score "+" when <5% outliers (acceptable)
+    - Score "o" when 5-10% outliers
+    - Score "-" when >10% outliers
+    - CALCE dataset: voltage outliers ~0-2% (minor, cycle boundaries), 
+      capacity outliers exist (12.497Ah erroneous value likely recording error)
+      → "+"
+
+1b. Current sign convention: ++/+/-
+    - Checks consistent sign convention (positive=charge, negative=discharge)
+    - Verifies Min_Current negative, Max_Current positive
+    - Score "++" when convention is consistent
+    - Score "+" when inconsistent but interpretable
+    - CALCE dataset: consistent sign convention across all cells → "++"
+
+2. COMPLETENESS
+---------------
+
+2a. Missing values: ++/+/-
+    - Calculates total NaN percentage across all columns
+    - Score "++" when 0% missing (complete)
+    - Score "+" when <1% missing
+    - Score "o" when 1-5% missing
+    - Score "-" when >5% missing
+    - CALCE dataset: Start_Time and End_Time columns are 100% NaN (structural issue),
+      critical cycle data columns completely filled → "o" (partially satisfied)
+
+2b. Test protocol documentation: ++/+/-
+    - Evaluates completeness of experimental documentation from filenames
+    - Score "++" when full extraction possible (>95% files parseable)
+    - Score "+" when partial extraction possible
+    - CALCE dataset: filenames encode cell ID, chemistry (LCO), temperature (25°C),
+      DoD range (0-100%), C-rates (0.5C), replicate ID → "++"
+
+3. ANOMALY MINIMIZATION
+-----------------------
+
+3a. Statistical outliers (IQR method on capacity): ++/+/-
+    - Uses 3× IQR rule on discharge capacity measurements
+    - Calculates: Q1 - 3×IQR to Q3 + 3×IQR as acceptable range
+    - Filters extreme values (e.g., 12.497Ah error) before analysis
+    - Score "++" when <1% outliers
+    - Score "+" when <10% outliers
+    - Score "o" when 10-20% outliers
+    - CALCE dataset: outliers primarily from cycle 0 (formation) and EOL degradation,
+      manageable level → "+"
+
+3b. Efficiency metrics: ++/+/-
+    - Checks for presence of Coulombic Efficiency and Energy Efficiency columns
+    - Score "++" when both metrics present and validated
+    - Score "+" when one metric present
+    - Score "-" when neither metric present
+    - CALCE dataset: no efficiency columns in cycle data files → "-"
+      (significant limitation for efficiency-focused studies)
+
+4. REPRESENTATIVENESS & DIVERSITY
+---------------------------------
+
+4a. Chemistry diversity: ++/+/-
+    - Counts distinct battery chemistries
+    - Score "++" when ≥3 chemistries
+    - Score "+" when 2 chemistries
+    - Score "o" when 1 chemistry
+    - Score "-" when none documented
+    - CALCE dataset: single chemistry (LCO) only → "o"
+      (good for LCO-specific studies, not representative of other chemistries)
+
+4b. Temperature conditions: ++/+/-
+    - Counts distinct temperature conditions tested
+    - Score "++" when ≥3 temperatures
+    - Score "+" when 2 temperatures
+    - Score "-" when 1 temperature
+    - CALCE dataset: single temperature (25°C) → "-"
+      (significant limitation for temperature-dependent degradation studies)
+
+4c. Depth of Discharge (DoD) diversity: ++/+/-
+    - Counts distinct DoD ranges tested
+    - Score "++" when ≥3 DoD ranges
+    - Score "+" when 2 ranges
+    - Score "o" when 1 range (full cycles only)
+    - CALCE dataset: single DoD (0-100% full cycles) → "o"
+
+4d. C-rate diversity: ++/+/-
+    - Counts distinct C-rates tested
+    - Score "++" when ≥4 C-rates
+    - Score "+" when 2-3 C-rates
+    - Score "-" when 1 C-rate
+    - CALCE dataset: single C-rate (0.5C charge and discharge) → "-"
+      (represents standard cycling only, not fast-charging)
+
+4e. Replicate cells: ++/+/-
+    - Counts replicate cells per condition
+    - Score "++" when ≥3 replicates
+    - Score "+" when 2 replicates
+    - Score "o" when 1 replicate
+    - CALCE dataset: 7 replicate cells under identical conditions → "++"
+      (excellent for statistical analysis of cell-to-cell variability)
+
+4f. Calendar aging included: ++/+/-
+    - Checks if protocol includes rest periods for calendar aging study
+    - Score "++" when dedicated calendar aging experiments present
+    - Score "+" when some rest periods included
+    - Score "-" when continuous cycling only
+    - CALCE dataset: no calendar aging protocol → "-"
+
+4g. Dynamic load profiles: ++/+/-
+    - Evaluates presence of realistic, dynamic current profiles
+    - Score "++" when using standard drive cycles
+    - Score "+" when using step/ramp profiles
+    - Score "o" when constant-current only
+    - CALCE dataset: CCCV cycling only (constant current constant voltage) → "o"
+
+5. BALANCED DISTRIBUTION
+------------------------
+
+5a. SOH range coverage: ++/+/-
+    - Analyzes SOH values from fresh (1.0) to end-of-life (<0.8)
+    - Score "++" when full range covered with cells reaching EOL
+    - Score "+" when good coverage but not all to EOL
+    - Score "o" when limited range
+    - CALCE dataset: SOH from ~1.0 to <0.8, ALL 7 cells reached EOL,
+      complete degradation trajectories → "++"
+      (Excellent for full lifecycle analysis)
+
+5b. Cycle contribution per cell: ++/+/-
+    - Calculates coefficient of variation (CV) of cycles across cells
+    - Score "++" when CV < 0.15 (very balanced)
+    - Score "+" when CV < 0.35 (reasonably balanced)
+    - Score "o" when CV < 0.60
+    - Score "-" when CV ≥ 0.60
+    - CALCE dataset: all cells under identical conditions, variance reflects 
+      natural degradation variability, CV typically 0.1-0.3 → "+"
+
+6. TEMPORAL COHERENCE
+---------------------
+
+6a. Monotonic cycle index: ++/+/-
+    - Checks for non-monotonic cycle numbers within each cell
+    - Score "++" when 0 cells have issues
+    - Score "+" when <10% cells affected
+    - CALCE dataset: cycle indices strictly increasing within each cell → "++"
+
+6b. Consistent degradation trend: ++/+/-
+    - Checks SOH is non-increasing (allowing 3% measurement noise margin)
+    - Counts cells with violations (>3% SOH increases)
+    - Score "++" when ≤1 cell shows recoveries
+    - Score "+" when <30% cells show recoveries
+    - CALCE dataset: minor recoveries expected due to measurement noise,
+      overall monotonic degradation → "++" or "+"
+
+6c. Complete degradation to EOL: ++/+/-
+    - Verifies cells cycled until reaching EOL (80% of initial capacity)
+    - Score "++" when ALL cells cycled to EOL
+    - Score "+" when >70% cells to EOL
+    - Score "o" when <50% to EOL
+    - CALCE dataset: all 7 cells cycled until 80% capacity fade → "++"
+      (Rare and valuable for full lifecycle analysis)
+
+AGGREGATION RULES
+=================
+
+The final scorecard presents each aspect individually (no single composite score)
+to provide granular quality insights. This allows users to:
+- Identify specific strengths (e.g., replicates, complete EOL = "++")
+- Recognize limitations (e.g., single temperature, single C-rate = "-")
+- Make informed decisions about fitness for specific use cases
+
+INTERPRETATION GUIDE
+====================
+
+"++" (Fully Satisfied):  
+  - Exceeds expectations for this aspect
+  - Examples: 7 replicates, complete EOL trajectories, good documentation
+  - Gold standard for controlled laboratory studies
+
+"+" (Mostly Satisfied):  
+  - Meets core requirements for most applications
+  - Minor issues present but manageable
+  - Examples: acceptable outlier levels, balanced cycles
+
+"o" (Partially Satisfied):  
+  - Significant limitation for some use cases
+  - Examples: single chemistry, single DoD, no dynamic loading
+  - Acceptable for specific research but not generalizable
+
+"-" (Not Satisfied):  
+  - Missing important feature or capability
+  - Examples: single temperature, single C-rate, no efficiency metrics
+  - Not suitable for applications requiring these features
+
+"N/A" (Not Applicable):  
+  - Criterion cannot be evaluated
+  - Missing required data or context
+
+KEY ASSUMPTIONS
+===============
+
+1. Physical bounds derived from LCO prismatic cell specifications
+2. EOL threshold = 80% of initial capacity (industry standard)
+3. SOH calculation uses first cycle capacity as baseline
+4. 3% SOH increase allowed as measurement noise
+5. IQR multiplier = 3 (extreme outlier detection)
+6. 12.497Ah capacity value is erroneous (physical impossible for these cells)
+7. Temperature data only in timeseries files (not cycle summaries)
+8. Start_Time/End_Time columns structural issue (not data loss)
+9. All 7 cells tested under IDENTICAL conditions (controlled experiment)
+10. Dataset represents standard-rate (0.5C) cycling only
+
+SPECIAL CONSIDERATIONS FOR CALCE DATASET
+=========================================
+
+1. Complete EOL Coverage: All 7 cells cycled to 80% capacity fade - RARE in public datasets
+   (most datasets stop before EOL or have censored data)
+
+2. Identical Conditions: Perfect controlled experiment with 7 replicates
+   - Enables statistical analysis of manufacturing variability
+   - No confounding variables (temperature, C-rate, DoD all constant)
+
+3. LCO Chemistry Focus: Specialized for LCO research
+   - Not generalizable to NMC, LFP, NCA
+   - LCO has different degradation mechanisms (cobalt dissolution, phase transitions)
+
+4. Standard C-rate Only: 0.5C charging/discharging
+   - No fast-charging data
+   - Represents conventional use, not extreme conditions
+
+5. Limited Diversity: Single temperature, DoD, C-rate
+   - Cannot study temperature acceleration factors
+   - Cannot study partial cycling effects
+   - Cannot study rate-dependent degradation
+
+6. Missing Efficiency Data: No Coulombic/Energy Efficiency columns
+   - Requires manual calculation from charge/discharge capacities
+   - Limitation for efficiency-focused studies
+
+7. Time Column Issue: Start_Time/End_Time 100% NaN
+   - Cannot reconstruct absolute timestamps
+   - Can still use relative cycle indices for temporal analysis
+
+8. Small But Complete: 7 cells, moderate cycle counts
+   - Ideal for algorithm development (small, clean, complete)
+   - Limited for deep learning (small dataset)
+
+VALIDATION NOTES
+================
+
+- CALCE dataset strengths: replicates, complete EOL, clean data, good documentation
+- Key limitations: low diversity (chemistry, temperature, C-rate, DoD), no efficiency metrics
+- Designed for: LCO-specific aging studies, algorithm benchmarking, EOL prediction
+- Not suitable for: multi-chemistry comparison, fast-charging research, temperature studies
+- Best use case: Controlled experiments with all cells reaching EOL under same conditions
+- Complementary to larger, more diverse datasets like MIT or Oxford
+- Excellent for validation due to complete degradation trajectories
