@@ -1,0 +1,187 @@
+SNL BATTERY DATASET QUALITY SCORING LOGIC
+==========================================
+
+OVERVIEW
+--------
+The scoring system evaluates the SNL Battery Dataset against 6 quality criteria,
+each with specific aspects. Scores range from "++" (Fully Satisfied) to "-" (Not Satisfied),
+with "N/A" for non-applicable checks.
+
+SCORING THRESHOLDS & LOGIC
+==========================
+
+1. CORRECTNESS (Physical plausibility)
+---------------------------------------
+
+1a. Voltage plausibility: ++/+/-
+    - Checks: Min voltage between 2.5-4.2V, Max voltage between 2.5-4.2V
+    - Score "+" given when outliers <5% of measurements
+    - Outliers at cycle boundaries (formation cycles) are accepted
+    - Score "++" would require 0 outliers (not possible due to real sensor data)
+    
+1b. Capacity plausibility: ++/+/-
+    - Expected range: 0.5-3.5 Ah (typical 18650 range)
+    - Multiplied by chemistry: LFP=1.1Ah, NCA=3.0Ah, NMC=2.5Ah nominal
+    - Filters out reference cycles (capacity <0.1Ah)
+    - Score "+" when outliers <10% of valid cycles
+    - Outliers at EOL and formation are physically justified
+
+2. COMPLETENESS
+---------------
+
+2a. Missing values: ++/+/-
+    - Scans all columns for null values
+    - Score "++" when NO null values in any column
+    - Score "+" when nulls present but <1% of dataset
+    - SNL dataset achieves "++" (no structural NaNs in critical columns)
+
+2b. Test protocol documentation: ++/+/-
+    - Checks filename parsing success rate
+    - Score "++" when >95% of files parse correctly
+    - Extracts: chemistry, temperature, DoD, C-rates, replicate ID
+    - Complete experimental matrix documented → "++"
+
+3. ANOMALY MINIMIZATION
+-----------------------
+
+3a. Statistical outliers (IQR method): ++/+/-
+    - Uses 3× IQR rule on discharge capacity
+    - Lower bound: Q1 - 3×IQR, Upper bound: Q3 + 3×IQR
+    - Score "+" when outliers <5% of measurements
+    - Accepts EOL degradation and measurement noise as valid outliers
+    - "++" would require <1% (unrealistic for aging studies)
+
+3b. Efficiency anomalies (Coulombic efficiency): ++/+/-
+    - Calculates CE = discharge_capacity / charge_capacity × 100
+    - Expected range: 80-102%
+    - Low CE at EOL or formation is expected behavior
+    - Score "+" when <10% of cycles outside range
+    - "++" would require <2% outside (rare in battery data)
+
+4. REPRESENTATIVENESS & DIVERSITY
+---------------------------------
+
+4a. Chemistry diversity: ++/+/-
+    - Score "++" when ≥3 distinct chemistries
+    - SNL includes LFP, NCA, NMC → "++"
+
+4b. Temperature conditions: ++/+/-
+    - Score "++" when ≥3 temperature levels
+    - SNL: 15°C, 25°C, 35°C → "++"
+
+4c. DoD diversity: ++/+/-
+    - Score "++" when ≥3 DoD ranges
+    - SNL: 0-100%, 20-80%, 40-60% → "++"
+
+4d. C-rate diversity: ++/+/-
+    - Score "++" when ≥4 C-rate levels
+    - SNL: 0.5C, 1C, 2C, 3C → "++"
+
+4e. Replicate cells: ++/+/-
+    - Score "++" when average replicates ≥2 per condition
+    - SNL: 3-4 replicates typical → "++"
+
+4f. Calendar aging: ++/+/-
+    - Score "-" because no dedicated calendar aging protocol
+    - Dataset focuses exclusively on cyclic aging
+
+4g. Dynamic load profiles: ++/+/-
+    - Score "o" (partially satisfied) - CC/CCCV only
+    - No real-world drive cycles included
+    - Laboratory conditions only
+
+5. BALANCED DISTRIBUTION
+------------------------
+
+5a. SOH range coverage: ++/+/-
+    - Checks coverage from fresh (SOH~1.0) to EOL (SOH<0.8)
+    - Score "+" when both fresh and EOL data present
+    - Score "++" if evenly distributed across SOH range
+    - SNL: Good coverage but skewed toward fresh data → "+"
+
+5b. Balanced cycle contribution: ++/+/-
+    - Calculates CV (coefficient of variation) of cycles/cell
+    - Score "+" when variation reflects experimental design
+    - Different lifetimes under different conditions = intentional variation
+    - Accept CV <1.0 as reasonable
+
+5c. Chemistry representation: ++/+/-
+    - Checks distribution across chemistries
+    - Score "+" when each chemistry has ≥20% of cycles
+    - LFP has more cycles (longer life), NCA/NMC fewer (shorter life)
+    - Distribution reflects degradation rates, not bias → "+"
+
+6. TEMPORAL COHERENCE
+---------------------
+
+6a. Monotonic cycle index: ++/+/-
+    - Checks strictly increasing cycle numbers per cell
+    - Score "++" when 100% of cells have monotonic indices
+    - Score "+" when >95% monotonic
+    - SNL achieves "++" (all cells properly ordered)
+
+6b. Consistent degradation trend: ++/+/-
+    - Checks SOH is non-increasing (allowing 3% noise margin)
+    - Score "++" when <10% of cells show recoveries >3%
+    - Score "+" when <25% show recoveries
+    - Minor recoveries from temperature effects or measurement noise accepted
+
+6c. Test time consistency: ++/+/-
+    - Checks test_time column is strictly increasing
+    - Score "++" when 100% monotonic
+    - Score "+" when >95% monotonic
+    - Verifies temporal ordering of cycles
+
+AGGREGATION RULES
+=================
+
+The final scorecard presents each aspect individually (no single composite score)
+to provide granular quality insights. This allows users to:
+- Identify specific strengths (e.g., documentation = "++")
+- Recognize limitations (e.g., no dynamic loading = "o")
+- Make informed decisions about fitness for specific use cases
+
+INTERPRETATION GUIDE
+====================
+
+"++" (Fully Satisfied):  
+  - Exceeds expectations or perfectly meets criterion
+  - No improvements needed
+  - Gold standard for this aspect
+
+"+" (Mostly Satisfied):  
+  - Meets core requirements
+  - Minor issues present but justifiable
+  - Suitable for most research purposes
+
+"o" (Partially Satisfied):  
+  - Significant limitation present
+  - May impact specific use cases
+  - Acceptable for limited applications
+
+"-" (Not Satisfied):  
+  - Missing critical feature
+  - Not suitable for applications requiring this aspect
+  - Documented as limitation
+
+"N/A" (Not Applicable):  
+  - Criterion cannot be evaluated
+  - Missing required data columns
+
+KEY ASSUMPTIONS
+===============
+
+1. Physical bounds derived from standard 18650 Li-ion specifications
+2. EOL threshold = 80% of initial capacity (industry standard)
+3. Coulombic efficiency expected 80-102% (allowing for measurement error)
+4. SOH calculation uses first valid cycle as baseline (skipping formation)
+5. 3% SOH increase allowed as measurement noise/temperature artifact
+6. IQR multiplier = 3 (extreme outlier detection, not moderate)
+
+VALIDATION NOTES
+================
+
+- All quantitative thresholds based on domain expertise from battery literature
+- Scoring designed to be reproducible across similar Li-ion cycling datasets
+- Conservative scoring: "++" requires near-perfect conditions
+- Transparency: each score includes explicit finding statement with evidence
