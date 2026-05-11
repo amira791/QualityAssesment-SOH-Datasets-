@@ -1,0 +1,300 @@
+REAL-WORLD EV OPERATION DATASET QUALITY SCORING LOGIC
+======================================================
+
+OVERVIEW
+--------
+The scoring system evaluates the Real-World Electric Vehicle Operation Dataset against 6 quality criteria,
+each with specific aspects relevant to operational fleet data. Scores range from "++" (Fully Satisfied) 
+to "-" (Not Satisfied), with "N/A" for non-applicable checks.
+
+Dataset context: 10 real-world EVs (6 passenger NCM, 1 passenger LFP, 3 electric buses LFP) with 
+1 month of operational data each. Total 1,188,470 data points capturing driving, charging, and rest 
+periods. Diverse conditions including real-world driving patterns, fast charging, and varying SOC ranges.
+
+SCORING THRESHOLDS & LOGIC
+==========================
+
+1. CORRECTNESS (Physical plausibility + signal semantics)
+---------------------------------------------------------
+
+1a. Physical plausibility (voltage, current, SOC, temperature, speed): ++/+/-
+    - Voltage bounds: 200-800V (typical EV battery pack voltages)
+    - Current bounds: -500A to 500A (discharge to charge, covers fast charging)
+    - SOC bounds: 0-100% (absolute scale)
+    - Temperature bounds: -20°C to 60°C (vehicle operating range)
+    - Speed bound: 0-150 km/h (legal highway speeds)
+    - Calculates % of measurements outside physical limits
+    - Score "++" when <0.1% outliers overall
+    - Score "+" when <5% outliers (acceptable with cleaning)
+    - Score "o" when 5-10% outliers
+    - Score "-" when >10% outliers
+    - EV dataset: voltage outliers 0.003% (minor, Vehicle#9 up to 1310V), 
+      current 0.002%, SOC 0.0004%, temperature 0.016% (Vehicle#9 255°C), 
+      speed 0.008% → "+" (minor issues in Vehicle#9)
+
+1b. Signal semantics: ++/+/-
+    - Verifies charging signal encoding (1=charging, 3=driving)
+    - Checks current polarity (positive=charge, negative=discharge)
+    - Validates SOC physical consistency
+    - Score "++" when semantics are correct and documented
+    - Score "+" when minor inconsistencies exist
+    - EV dataset: perfect semantic encoding across all vehicles → "++"
+
+2. COMPLETENESS
+---------------
+
+2a. Missing values: ++/+/-
+    - Calculates vehicles with missing data and overall missing percentage
+    - Score "++" when 0% missing across all vehicles
+    - Score "+" when <1% missing (minor, manageable)
+    - Score "o" when 1-5% missing
+    - Score "-" when >5% missing
+    - EV dataset: Vehicle#8 only vehicle with missing (0.56% in 6 columns),
+      others 0% missing, overall completeness 99.95%+ → "+"
+
+2b. Operational mode coverage: ++/+/-
+    - Checks coverage of driving, charging, and rest modes
+    - Score "++" when all three modes present across fleet
+    - Score "+" when most vehicles have all modes
+    - Score "o" when limited mode coverage
+    - EV dataset: excellent coverage except Vehicle#7 (only charging in sample),
+      SOC ranges 1-100% across fleet → "+"
+
+3. ANOMALY MINIMIZATION
+-----------------------
+
+3a. Statistical outliers per vehicle: ++/+/-
+    - Evaluates outlier presence per vehicle (especially Vehicle#9)
+    - Score "++" when 0 vehicles have significant outliers
+    - Score "+" when 1 vehicle has minor outliers
+    - Score "o" when 1 vehicle has major outliers (needs cleaning)
+    - Score "-" when multiple vehicles have outlier issues
+    - EV dataset: Vehicle#9 has significant anomalies (1310V, 255°C),
+      likely sensor errors, other vehicles 0% outliers → "o"
+
+3b. Signal consistency: ++/+/-
+    - Checks physical relationships between signals
+    - Verifies: current→SOC direction, voltage→SOC relationship
+    - Checks temperature response to charging
+    - Score "++" when all signals physically consistent
+    - Score "+" when minor inconsistencies but explainable
+    - Score "o" when some vehicles show inconsistencies
+    - EV dataset: all signals consistent except Vehicle#9 anomalies → "+"
+
+4. REPRESENTATIVENESS & DIVERSITY
+---------------------------------
+
+4a. Vehicle type diversity: ++/+/-
+    - Counts distinct vehicle types (passenger, bus, commercial)
+    - Score "++" when ≥3 types or includes both passenger and commercial
+    - Score "+" when 2 types
+    - Score "o" when 1 type
+    - EV dataset: passenger vehicles (7) + electric buses (3) → "++"
+
+4b. Chemistry diversity: ++/+/-
+    - Counts distinct battery chemistries
+    - Score "++" when ≥2 major chemistries represented
+    - Score "+" when 1 chemistry with variations
+    - Score "o" when single chemistry only
+    - EV dataset: NCM (6 vehicles) + LFP (4 vehicles) → "++"
+
+4c. Capacity range: ++/+/-
+    - Evaluates spread of battery capacities
+    - Score "++" when range >3× or covers multiple vehicle segments
+    - Score "+" when good spread but limited
+    - Score "o" when narrow range
+    - EV dataset: 120Ah (passenger LFP) to 645Ah (bus LFP), 5.4× range → "++"
+
+4d. Real-world operation: ++/+/-
+    - Assesses authenticity of operational data
+    - Score "++" when real-world driving/charging data (not lab-simulated)
+    - Score "+" when mostly realistic but some limitations
+    - Score "o" when simulated or synthetic
+    - EV dataset: actual EV fleet data with real driving patterns, 
+      fast charging, city/highway mix → "++"
+
+4e. Sampling frequency: ++/+/-
+    - Evaluates temporal resolution for intended analyses
+    - Score "++" when ≥1 Hz (captures transients)
+    - Score "+" when 0.5-1 Hz (good for most analyses)
+    - Score "o" when 0.1-0.5 Hz (adequate for operational patterns)
+    - Score "-" when <0.1 Hz (too sparse)
+    - EV dataset: 0.1Hz (9 vehicles), 0.5Hz (Vehicle#7), 10-second sampling
+      adequate for driving/charging patterns but not transients → "o"
+
+4f. Temporal coverage: ++/+/-
+    - Evaluates data collection duration
+    - Score "++" when >6 months (captures seasonal effects)
+    - Score "+" when 3-6 months
+    - Score "o" when 1-3 months
+    - Score "-" when <1 month
+    - EV dataset: 1 month per vehicle → "o"
+      (sufficient for usage patterns, insufficient for degradation studies)
+
+5. BALANCED DISTRIBUTION
+------------------------
+
+5a. SOC range coverage: ++/+/-
+    - Analyzes SOC utilization across fleet
+    - Score "++" when full range 0-100% covered, good distribution
+    - Score "+" when wide range but some bias
+    - Score "o" when limited range
+    - EV dataset: SOC min 1-46%, max 97-100% across vehicles,
+      means 60.9-78.3%, excellent full-range coverage → "++"
+
+5b. Vehicle data balance: ++/+/-
+    - Calculates CV of data points across vehicles
+    - Score "++" when CV < 0.3 (well-balanced)
+    - Score "+" when CV 0.3-0.6 (moderately balanced)
+    - Score "o" when CV > 0.6 (imbalanced)
+    - EV dataset: Vehicle#7 has more data (0.5Hz vs 0.1Hz),
+      CV ~0.4, reasonable balance → "+"
+
+5c. Chemistry balance: ++/+/-
+    - Checks balance between NCM and LFP representation
+    - Score "++" when both chemistries have comparable data volume
+    - Score "+" when both present but imbalanced
+    - Score "o" when one dominates
+    - EV dataset: NCM (6 vehicles, passenger), LFP (4 vehicles, passenger+bus),
+      good representation for comparison studies → "++"
+
+6. TEMPORAL COHERENCE
+---------------------
+
+6a. Timestamp ordering: ++/+/-
+    - Checks chronological ordering of timestamps within each vehicle
+    - Score "++" when strictly increasing for all vehicles
+    - Score "+" when minor issues but fixable
+    - EV dataset: all vehicles have sequential timestamps → "++"
+
+6b. Temporal gaps: ++/+/-
+    - Evaluates regularity of sampling intervals
+    - Score "++" when regular intervals, no significant gaps
+    - Score "+" when minor gaps (<1% of intervals)
+    - Score "o" when irregular but continuous
+    - EV dataset: regular 10-second (0.1Hz) or 2-second (0.5Hz) intervals,
+      continuous monitoring, no significant gaps → "++"
+
+6c. Mileage progression: ++/+/-
+    - Verifies cumulative odometer increases monotonically
+    - Score "++" when strictly increasing for all vehicles
+    - Score "+" when minor issues
+    - EV dataset: mileage monotonically increasing, 27,677km to 387,325km
+      total distance, excellent progression tracking → "++"
+
+6d. Event identification: ++/+/-
+    - Checks ability to identify driving/charging events
+    - Score "++" when events clearly distinguishable
+    - Score "+" when mostly clear but some ambiguity
+    - EV dataset: charging_signal and current clearly define events,
+      SOC evolution follows expected patterns → "++"
+
+AGGREGATION RULES
+=================
+
+The final scorecard presents each aspect individually (no single composite score)
+to provide granular quality insights. This allows users to:
+- Identify specific strengths (real-world data, vehicle diversity, temporal coherence = "++")
+- Recognize limitations (sampling frequency, temporal coverage = "o")
+- Make informed decisions about fitness for specific use cases
+
+INTERPRETATION GUIDE
+====================
+
+"++" (Fully Satisfied):  
+  - Exceeds expectations for this aspect
+  - Examples: chemistry diversity, SOC coverage, temporal coherence
+  - Gold standard for real-world operational data
+
+"+" (Mostly Satisfied):  
+  - Meets core requirements for most applications
+  - Minor issues present but manageable
+  - Examples: physical plausibility (Vehicle#9 outliers), missing data (0.56%)
+  - Suitable for most EV operation analysis after light cleaning
+
+"o" (Partially Satisfied):  
+  - Significant limitation for some use cases
+  - Examples: sampling frequency (0.1Hz), temporal coverage (1 month)
+  - Acceptable for operational pattern analysis but not transient dynamics
+
+"-" (Not Satisfied):  
+  - Missing important feature or capability
+  - Examples: none in this dataset (all aspects at least "o")
+  - Would indicate severe quality issues
+
+"N/A" (Not Applicable):  
+  - Criterion cannot be evaluated
+  - Missing required data or context
+
+KEY ASSUMPTIONS
+===============
+
+1. Physical bounds derived from typical EV battery packs and vehicle operation
+2. Charging signal encoding: 1=charging, 3=driving (documented in data description)
+3. Current polarity: positive=charging, negative=discharging
+4. 1 month per vehicle sufficient for usage pattern analysis but not degradation
+5. 0.1Hz sampling (10 seconds) adequate for driving/charging events
+6. Vehicle#9 outliers (1310V, 255°C) are sensor errors requiring filtering
+7. Vehicle#7 only has charging mode in 1-month sample (possible data collection period)
+8. All vehicles use same signal definitions despite different types
+9. Missing data in Vehicle#8 is random (0.56%, 6 columns)
+10. Mileage is cumulative odometer (monotonic increasing)
+
+SPECIAL CONSIDERATIONS FOR EV DATASET
+======================================
+
+1. Real-World Uniqueness: Only dataset in battery collection with actual field data
+   - Not laboratory-controlled cycles
+   - Includes real driving patterns, traffic, weather effects
+   - Captures realistic fast charging behavior
+
+2. Vehicle Diversity: Unmatched diversity in single dataset
+   - Passenger cars (NCM + LFP)
+   - Electric buses (LFP, different capacities)
+   - Different usage patterns (personal vs fleet)
+
+3. Operational Realism: Perfect for operational research
+   - SOC management strategies
+   - Charging behavior analysis
+   - Driving pattern characterization
+   - Fleet analytics
+
+4. Sampling Limitations: 0.1Hz insufficient for:
+   - High-frequency transient analysis
+   - Detailed voltage/current dynamics
+   - Instantaneous power calculations
+   - Cell-level modeling
+
+5. Temporal Limitations: 1 month per vehicle
+   - Cannot study battery degradation over time
+   - No seasonal variation captured
+   - Limited for long-term trend analysis
+   - Perfect for operational patterns, not aging
+
+6. Vehicle#9 Anomalies: Requires cleaning
+   - 1310V likely sensor scaling error
+   - 255°C clearly erroneous (impossible temperature)
+   - Affects <0.02% of data
+   - Easily filterable
+
+7. Missing Data: Vehicle#8 only
+   - 0.56% missing in 6 columns
+   - Minimal impact on analysis
+   - Can be dropped or interpolated
+
+8. Chemistry Comparison: Unique opportunity
+   - NCM vs LFP in real operation
+   - Different vehicle types (passenger vs bus)
+   - Realistic comparison of chemistry behaviors
+
+VALIDATION NOTES
+================
+
+- EV dataset strengths: real-world, diverse vehicles/chemistries, excellent temporal coherence
+- Key limitations: sampling rate (0.1Hz), duration (1 month), Vehicle#9 outliers
+- Designed for: EV operation analysis, fleet management, charging behavior, SOC strategies
+- Not suitable for: degradation modeling, high-frequency dynamics, cell-level studies
+- Most "real" dataset in the collection - captures actual EV usage
+- Complementary to laboratory aging datasets (MIT, Oxford, CALCE, SNL)
+- Perfect for bridging gap between laboratory aging and real-world operation
+- Data quality is high despite minor issues requiring cleaning
