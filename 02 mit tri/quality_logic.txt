@@ -1,0 +1,274 @@
+MIT-STANFORD-TRI FAST-CHARGING DATASET QUALITY SCORING LOGIC
+============================================================
+
+OVERVIEW
+--------
+The scoring system evaluates the MIT-Stanford-TRI Fast-Charging Dataset against 6 quality criteria,
+each with specific aspects relevant to this dataset. Scores range from "++" (Fully Satisfied) 
+to "-" (Not Satisfied), with "N/A" for non-applicable checks.
+
+Dataset context: 141 commercial LFP/graphite cells (A124, 2.54Ah nominal) tested under 72 different 
+fast-charging policies. Large-scale dataset (8GB, 117,775 cycle records) designed for early prediction 
+of battery lifetime under fast-charging conditions.
+
+SCORING THRESHOLDS & LOGIC
+==========================
+
+1. CORRECTNESS (Physical plausibility + data integrity)
+-------------------------------------------------------
+
+1a. Physical plausibility (voltage, current, temperature): ++/+/-
+    - Voltage bounds: 2.0-3.65V (LFP chemistry operating range)
+    - Current bound: ±10A max (for 2.54Ah cell, ~4C peak)
+    - Temperature bounds: 10-50°C (controlled environment, self-heating)
+    - Calculates % of measurements outside physical limits
+    - Score "++" when <0.1% outliers (excellent)
+    - Score "+" when <10% outliers (acceptable, filterable)
+    - Score "o" when 10-20% outliers
+    - Score "-" when >20% outliers
+    - MIT dataset: voltage outliers ~5.9% (cycle boundaries), current 0% outliers, 
+      temperature outliers ~2% (sensor glitches: -270°C to 400°C) → "+"
+
+1b. Current sign convention: ++/+/-
+    - Checks consistent sign convention (positive=charge, negative=discharge)
+    - Verifies both charging and discharging present
+    - Score "++" when convention is consistent and documented
+    - MIT dataset: excellent convention with policy documentation → "++"
+
+2. COMPLETENESS
+---------------
+
+2a. Missing values: ++/+/-
+    - Calculates total NaN percentage across all cycles and fields
+    - Score "++" when 0% missing (complete coverage)
+    - Score "+" when <1% missing
+    - Score "o" when 1-5% missing
+    - Score "-" when >5% missing
+    - MIT dataset: ZERO missing values across all 117,775 cycles → "++"
+      (Exceptionally complete for dataset of this scale)
+
+2b. Test protocol documentation: ++/+/-
+    - Evaluates completeness of experimental documentation
+    - Checks for policy descriptions, replicate info, batch metadata
+    - Score "++" when full documentation embedded in structure
+    - Score "+" when partial documentation available
+    - Score "o" when minimal documentation
+    - MIT dataset: policy_readable field with 72 distinct protocols, batch info, 
+      channel IDs, barcodes → "++"
+
+3. ANOMALY MINIMIZATION
+-----------------------
+
+3a. Statistical outliers (IQR method on capacity): ++/+/-
+    - Uses 3× IQR rule on discharge capacity measurements
+    - Calculates: Q1 - 3×IQR to Q3 + 3×IQR as acceptable range
+    - Score "++" when <1% outliers
+    - Score "+" when <10% outliers (acceptable for fast-charging data)
+    - Score "o" when 10-20% outliers
+    - Score "-" when >20% outliers
+    - MIT dataset: capacity outliers from formation cycles and high-C-rate 
+      measurements (not reference 0.5C) → "+"
+
+3b. High-frequency noise level: ++/+/-
+    - Analyzes voltage and current first-differences
+    - Mean |dV|, std |dV|, max |dV| indicate signal quality
+    - Sampling rate: 13.5 Hz (dt=0.074s) - high resolution
+    - Score "++" when very low noise floor (mean |dV| < 0.01V)
+    - Score "+" when acceptable noise (mean |dV| < 0.05V)
+    - MIT dataset: mean |dV| = 0.0035V, std = 0.0064V → "++"
+
+4. REPRESENTATIVENESS & DIVERSITY
+---------------------------------
+
+4a. Fast-charging policy diversity: ++/+/-
+    - Counts distinct fast-charging protocols tested
+    - Considers variation in C-rates, SOC windows, protocol types
+    - Score "++" when ≥20 distinct policies (large design space)
+    - Score "+" when 10-19 policies
+    - Score "o" when 5-9 policies
+    - Score "-" when <5 policies
+    - MIT dataset: 72 unique policies (C-rates 3.6C-8C, SOC 15-80%, 
+      constant current & variable charge) → "++"
+
+4b. Cycle life range: ++/+/-
+    - Evaluates spread from early failure to long life
+    - Score "++" when range >10× and includes failures
+    - Score "+" when good spread but limited extremes
+    - MIT dataset: 101-2,237 cycles (22× range), mean 835 cycles.
+      Perfect for studying early prediction of battery lifetime → "++"
+
+4c. Temperature conditions: ++/+/-
+    - Assesses temperature coverage and control
+    - Score "++" when multiple controlled setpoints
+    - Score "+" when single setpoint with monitored variation
+    - Score "o" when uncontrolled but monitored
+    - MIT dataset: 25°C setpoint, actual 25-45°C from self-heating.
+      Temperature glitches present but thermal behavior documented → "+"
+
+4d. Replicate cells per condition: ++/+/-
+    - Counts average replicates across experimental conditions
+    - Score "++" when ≥3 replicates average
+    - Score "+" when 2 replicates average
+    - Score "o" when 1 replicate (no replication)
+    - MIT dataset: average 2-4 replicates per policy → "++"
+
+4e. Calendar aging included: ++/+/-
+    - Checks if protocol includes rest periods for calendar aging study
+    - Score "++" when dedicated calendar aging experiments present
+    - Score "+" when some rest periods included
+    - Score "-" when continuous cycling only
+    - MIT dataset: no calendar aging protocol, continuous cycling → "-"
+
+4f. Dynamic load profiles: ++/+/-
+    - Evaluates presence of realistic, dynamic current profiles
+    - Score "++" when using standard drive cycles
+    - Score "+" when using step/ramp profiles
+    - Score "o" when constant-current only
+    - MIT dataset: all cycles CCCV charging (constant current constant voltage),
+      no drive cycles → "o" (partially satisfied)
+
+5. BALANCED DISTRIBUTION
+------------------------
+
+5a. SOH range coverage: ++/+/-
+    - Analyzes SOH values from fresh (1.0) to end-of-life (<0.8)
+    - Score "++" when SOH spans full range [0.7, 1.0] with good coverage
+    - Score "+" when covers fresh to EOL but limited EOL data
+    - Score "o" when limited range or cannot compute
+    - MIT dataset: SOH range 0.6-1.05 but <10% of cycles below EOL.
+      Only ~2% of cells reached EOL. Heavily weighted toward healthy cells.
+      Perfect for early prediction research (training on early cycles) → "+"
+    (Note: This is a design feature, not a flaw for the dataset's purpose)
+
+5b. Cycle count distribution: ++/+/-
+    - Calculates coefficient of variation (CV) of cycles per cell
+    - Examines histogram shape (unimodal vs bimodal)
+    - Score "++" when CV > 0.5 with meaningful variation
+    - Score "+" when CV 0.3-0.5
+    - Score "o" when CV < 0.3 (limited variation)
+    - MIT dataset: bimodal distribution (short-life 300-600 cycles, 
+      long-life 800-1200 cycles, ultra-long >1500 cycles), CV ~0.4-0.6 → "+"
+
+5c. Batch representation: ++/+/-
+    - Checks distribution across experimental batches
+    - Score "++" when multiple batches balanced
+    - Score "+" when multiple batches but imbalanced
+    - MIT dataset: Batch1=46 cells, Batch2=47 cells, Batch3=2 cells (pilot), 
+      Batch4=46 cells. Good main batch balance → "+"
+
+6. TEMPORAL COHERENCE
+---------------------
+
+6a. Monotonic timestamps: ++/+/-
+    - Checks for decreasing or duplicate timestamps within each cycle
+    - Score "++" when 0 non-monotonic segments
+    - Score "+" when <1% of cycles affected
+    - Score "o" when 1-5% affected
+    - Score "-" when >5% affected
+    - MIT dataset: non-monotonic time vectors ~0.5-1% of segments,
+      occurs at cycle boundaries/data recording glitches → "+"
+
+6b. Cycle index consistency: ++/+/-
+    - Verifies cycle numbers are sequential and start from 1
+    - Checks alignment between summary fields and cycles array
+    - Score "++" when perfect alignment with no gaps
+    - Score "+" when minor issues but fixable
+    - MIT dataset: perfect sequential cycles, no gaps, excellent alignment → "++"
+
+6c. Consistent degradation trend: ++/+/-
+    - Checks SOH is non-increasing (allowing for LFP chemistry behavior)
+    - LFP exhibits minor capacity recoveries (charge redistribution) - expected
+    - Score "++" when monotonic or expected chemistry behavior
+    - Score "+" when acceptable deviation
+    - MIT dataset: LFP chemistry with minor recoveries (<2%) from 
+      charge redistribution - normal and physically consistent → "++"
+
+6d. Sampling rate consistency: ++/+/-
+    - Examines sampling interval consistency across cycles/batches
+    - Score "++" when consistent high-frequency sampling
+    - Score "+" when consistent but lower frequency
+    - MIT dataset: mean dt = 0.074s (13.5 Hz) consistently across all batches,
+      sufficient for fast electrochemical dynamics → "++"
+
+AGGREGATION RULES
+=================
+
+The final scorecard presents each aspect individually (no single composite score)
+to provide granular quality insights. This allows users to:
+- Identify specific strengths (e.g., policy diversity, missing values = "++")
+- Recognize limitations (e.g., no calendar aging = "-", CCCV only = "o")
+- Make informed decisions about fitness for specific use cases
+
+INTERPRETATION GUIDE
+====================
+
+"++" (Fully Satisfied):  
+  - Exceeds expectations for this aspect
+  - Gold standard for large-scale battery datasets
+  - Examples: 0% missing values, 72 policies, 13.5Hz sampling
+  - Exceptional quality for this aspect
+
+"+" (Mostly Satisfied):  
+  - Meets core requirements for most applications
+  - Minor issues present but explainable/filterable
+  - Examples: 5.9% voltage outliers (cycle boundaries), temperature glitches
+  - Suitable for fast-charging research after minor cleaning
+
+"o" (Partially Satisfied):  
+  - Significant limitation for some use cases
+  - Example: CCCV only (no dynamic drive cycles)
+  - Acceptable for controlled laboratory studies, not for drive-cycle emulation
+
+"-" (Not Satisfied):  
+  - Missing important feature or capability
+  - Examples: no calendar aging protocol
+  - Not suitable for applications requiring these features
+
+"N/A" (Not Applicable):  
+  - Criterion cannot be evaluated
+  - Missing required data or context
+
+KEY ASSUMPTIONS
+===============
+
+1. Physical bounds derived from LFP chemistry (A124 cell specifications)
+2. EOL threshold = 80% of initial capacity (industry standard)
+3. 0.5C reference capacity = 2.54Ah nominal (standard characterization)
+4. SOH calculation uses first available capacity as baseline
+5. LFP chemistry exhibits minor capacity recoveries (charge redistribution) - allowed
+6. IQR multiplier = 3 (extreme outlier detection)
+7. Temperature setpoint = 25°C, actual range 25-45°C from self-heating
+8. Sampling anomalies at cycle boundaries are expected (protocol transitions)
+9. Dataset designed for early prediction of remaining useful life (RUL)
+10. Capacity measured at fast-charging C-rates, not at standard 0.5C reference
+
+SPECIAL CONSIDERATIONS FOR MIT DATASET
+=======================================
+
+1. Early Prediction Focus: Dataset intentionally biased toward healthy cells 
+   (few reached EOL) - this is a design feature for early RUL prediction research
+
+2. Fast-Charging Specific: All data collected under aggressive charging protocols 
+   (3.6C to 8C) - not representative of standard or slow charging
+
+3. LFP Chemistry Quirks: Flat voltage curve and capacity recoveries are normal 
+   for LFP - not anomalies requiring correction
+
+4. Temperature Artifacts: Some temperature readings (-270°C, 400°C) are clear 
+   sensor glitches that require cleaning
+
+5. High-Frequency Value: 13.5 Hz sampling enables detailed study of 
+   electrochemical dynamics during fast-charging
+
+6. Zero Missing Values: Exceptionally complete dataset - rare for 8GB scale
+
+VALIDATION NOTES
+================
+
+- MIT dataset strengths: completeness, policy diversity, sampling rate, replication
+- Key limitations: no dynamic loading, no calendar aging, single temperature setpoint
+- Designed specifically for fast-charging lifetime prediction
+- Not suitable for: drive-cycle emulation, multi-temperature studies, calendar aging
+- Outstanding data completeness and documentation
+- Minor cleaning required: voltage outliers (filter ~6%), temperature glitches (remove)
+- Perfect for machine learning applications (complete, large-scale, well-documented)
