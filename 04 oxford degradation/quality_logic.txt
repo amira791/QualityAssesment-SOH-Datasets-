@@ -1,0 +1,254 @@
+OXFORD BATTERY DEGRADATION DATASET 1 QUALITY SCORING LOGIC
+==========================================================
+
+OVERVIEW
+--------
+The scoring system evaluates the Oxford Battery Degradation Dataset against 6 quality criteria,
+each with specific aspects relevant to this dataset. Scores range from "++" (Fully Satisfied) 
+to "-" (Not Satisfied), with "N/A" for non-applicable checks.
+
+Dataset context: 8 Kokam 740mAh Li-ion pouch cells tested at 40°C with Urban Artemis drive cycles.
+
+SCORING THRESHOLDS & LOGIC
+==========================
+
+1. CORRECTNESS (Physical plausibility + data integrity)
+-------------------------------------------------------
+
+1a. Physical plausibility (voltage & temperature): ++/+/-
+    - Voltage bounds: 2.7-4.2V (based on Kokam 740mAh Li-ion pouch cell)
+    - Temperature bounds: 0-50°C (chamber at 40°C)
+    - Calculates % of measurements outside physical limits
+    - Score "++" when 0% violations (all data physically valid)
+    - Score "+" when <1% violations (minor sensor noise)
+    - Oxford dataset achieves "++" (no violations)
+
+1b. Current sign convention: ++/+/-
+    - Checks that charge decreases during discharge (negative derivative)
+    - Score "++" when convention is consistent and physically correct
+    - Dataset contains only discharge data (C1dc), no sign ambiguity → "++"
+
+2. COMPLETENESS
+---------------
+
+2a. Missing timestamps / logging gaps: ++/+/-
+    - Detects gaps >5× median sampling interval within characterisation cycles
+    - Gaps at cycle start/end are expected (test protocol transitions)
+    - Score "++" when no unexpected gaps (total_gaps = 0)
+    - Score "+" when gaps exist but are explainable (protocol boundaries)
+    - Oxford dataset: gaps at characterisation cycle boundaries → "+"
+
+2b. Null / NaN values: ++/+/-
+    - Calculates total NaN percentage across all columns
+    - Special attention to temperature column (not recorded for all cycles)
+    - Score "++" when 0% NaNs
+    - Score "+" when <5% NaNs (critical channels complete)
+    - Score "o" when 5-20% NaNs
+    - Score "-" when >20% NaNs
+    - Oxford: temperature has NaNs (~15-20% expected) → "+" to "o" range
+
+3. ANOMALY MINIMIZATION
+-----------------------
+
+3a. Statistical outliers (IQR method): ++/+/-
+    - Uses 3× IQR rule on voltage and temperature
+    - Calculates: Q1 - 3×IQR to Q3 + 3×IQR as acceptable range
+    - Score "++" when 0 outliers detected
+    - Score "+" when <1% outliers (measurement noise level)
+    - Oxford dataset: minimal outliers, clean data → "+" or "++"
+
+3b. Unexpected / abrupt signal changes: ++/+/-
+    - Analyzes voltage first-difference (|ΔV|)
+    - Calculates mean and max of absolute voltage changes
+    - Large jumps at cycle boundaries are acceptable (test transitions)
+    - Score "++" when within-cycle profiles are smooth
+    - Score "+" when abrupt changes limited to cycle boundaries
+    - Oxford: high max |ΔV| only at transitions → "+"
+
+3c. High-frequency noise level: ++/+/-
+    - Computes standard deviation of voltage differences
+    - Low noise indicates clean, analyzable data
+    - Score "++" when noise_std < 0.01V (very clean)
+    - Score "+" when noise_std < 0.05V (acceptable)
+    - Score "o" when noise_std < 0.1V (noisy but usable)
+    - Oxford: low noise levels → "++"
+
+4. REPRESENTATIVENESS & DIVERSITY
+---------------------------------
+
+4a. Operating conditions coverage: ++/+/-
+    - Evaluates relevance to target application (EV batteries)
+    - Considers: temperature control, drive cycle realism, characterization frequency
+    - Score "++" when conditions closely match real-world EV operation
+    - Score "+" when good representation but missing some dimensions
+    - Oxford: Urban Artemis drive cycle + regular characterization → "+"
+
+4b. Temperature setpoints / diversity: ++/+/-
+    - Counts distinct temperature conditions tested
+    - Score "++" when ≥3 temperature levels
+    - Score "+" when 2 temperature levels
+    - Score "-" when single temperature only
+    - Score "o" when temperature varies but not controlled
+    - Oxford: single temperature (40°C) → "-" (significant limitation)
+
+4c. C-rate diversity: ++/+/-
+    - Evaluates range of charge/discharge rates
+    - Urban Artemis: variable current (peaks ~2-3C on 740mAh cell)
+    - Charge: 1C constant current
+    - Characterization: pseudo-OCV (~0.05C)
+    - Score "++" when covering low, medium, and high rates
+    - Score "+" when good coverage but missing extremes
+    - Oxford: reasonable EV-relevant range → "+"
+
+4d. Partial cycle presence: ++/+/-
+    - Checks if dataset includes partial (non-full) cycles
+    - Important for some applications (BMS, state estimation)
+    - Score "++" when partial cycles are included by design
+    - Score "+" when some partial cycles present
+    - Score "-" when no partial cycles (full cycles only)
+    - Oxford: full drive cycles only → "-"
+
+4e. Partial DoD profiles: ++/+/-
+    - Checks for cycles with depth-of-discharge <100%
+    - Score "++" when multiple DoD levels tested
+    - Score "+" when at least one partial DoD profile
+    - Score "-" when only 100% DoD profiles
+    - Oxford: all cycles full DoD → "-"
+
+4f. Dynamic load profiles: ++/+/-
+    - Evaluates presence of realistic, dynamic current profiles
+    - Score "++" when using standard drive cycles (Artemis, WLTP, US06, etc.)
+    - Score "+" when using simplified dynamic profiles
+    - Score "o" when constant-current only
+    - Score "-" when no dynamic loading
+    - Oxford: Urban Artemis drive cycle (highly dynamic) → "++"
+
+4g. Calendar aging included: ++/+/-
+    - Checks if protocol includes rest periods to study calendar aging
+    - Score "++" when dedicated calendar aging experiments present
+    - Score "+" when some rest periods included
+    - Score "-" when continuous cycling only (no calendar aging study)
+    - Oxford: continuous cycling → "-"
+
+4h. Replicate cells per condition: ++/+/-
+    - Counts number of cells tested under identical conditions
+    - Score "++" when ≥3 replicates
+    - Score "+" when 2 replicates
+    - Score "o" when 1 replicate (no replication)
+    - Oxford: 8 cells identical conditions → "++"
+
+5. BALANCED DISTRIBUTION
+------------------------
+
+5a. SOH range coverage: ++/+/-
+    - Analyzes SOH values from fresh (1.0) to end-of-life (<0.8)
+    - Score "++" when SOH spans full range [0.7, 1.0] with good coverage
+    - Score "+" when covers fresh to EOL but with gaps
+    - Score "o" when limited range or cannot compute
+    - Oxford: good fresh-to-EOL coverage → "+"
+
+5b. Balanced SOH distribution: ++/+/-
+    - Compares distribution across SOH bins:
+        <0.70, 0.70-0.80 (EOL range)
+        0.80-0.90, >0.90 (healthy range)
+    - Calculates imbalance = max% - min%
+    - Score "++" when imbalance <20 percentage points
+    - Score "+" when imbalance <40pp (reasonable)
+    - Score "o" when imbalance ≥40pp (skewed)
+    - Oxford: more cycles at high SOH (characterization every 100 cycles) → "o"
+
+5c. Balanced cycle contribution per cell: ++/+/-
+    - Calculates coefficient of variation (CV) of cycles/cell
+    - Score "++" when CV < 0.15 (very balanced)
+    - Score "+" when CV < 0.35 (reasonably balanced)
+    - Score "o" when CV < 0.60 (moderate imbalance)
+    - Score "-" when CV ≥ 0.60 (severe imbalance)
+    - Oxford: 46-78 cycles/cell, CV ~0.15-0.25 → "+"
+
+6. TEMPORAL COHERENCE
+---------------------
+
+6a. Monotonic cycle index / timestamps: ++/+/-
+    - Checks that cycle numbers increase monotonically
+    - Score "++" when strictly increasing for all cells
+    - Score "+" when some non-monotonic but explainable
+    - Oxford: explicit sequential cycle numbers → "++"
+
+6b. Channel synchronization: ++/+/-
+    - Verifies that all channels share same time base
+    - Score "++" when synchronized at acquisition level
+    - Score "+" when alignable despite minor offsets
+    - Oxford: all channels same sampling → "++"
+
+6c. Strictly increasing timestamps: ++/+/-
+    - Checks for decreasing or duplicate timestamps within each cycle
+    - Score "++" when 0 non-monotonic segments
+    - Score "+" when <1% of cycles affected
+    - Oxford: clean, monotonic timestamps → "++"
+
+6d. Consistent degradation trend: ++/+/-
+    - Checks SOH is non-increasing (allowing 2% recovery for measurement noise)
+    - Counts cells with violations (>2% SOH increase)
+    - Score "++" when ≤1 cell shows minor recoveries
+    - Score "+" when <25% cells show recoveries
+    - Score "o" when cannot assess
+    - Oxford: monotonic degradation overall → "++" or "+"
+
+AGGREGATION RULES
+=================
+
+The final scorecard presents each aspect individually (no single composite score)
+to provide granular quality insights. This allows users to:
+- Identify specific strengths (e.g., dynamic loading = "++")
+- Recognize limitations (e.g., single temperature = "-")
+- Make informed decisions about fitness for specific use cases
+
+INTERPRETATION GUIDE
+====================
+
+"++" (Fully Satisfied):  
+  - Exceeds expectations for this aspect
+  - Gold standard (e.g., Urban Artemis drive cycle, 8 replicates)
+  - No meaningful improvements needed
+
+"+" (Mostly Satisfied):  
+  - Meets core requirements for most applications
+  - Minor limitations present but acceptable
+  - Suitable for EV battery aging research
+
+"o" (Partially Satisfied):  
+  - Significant limitation for some use cases
+  - Example: SOH distribution skewed toward fresh cells
+  - Acceptable with awareness of limitations
+
+"-" (Not Satisfied):  
+  - Missing important feature or capability
+  - Examples: single temperature, no partial cycles, no calendar aging
+  - Not suitable for applications requiring these features
+
+"N/A" (Not Applicable):  
+  - Criterion cannot be evaluated
+  - Missing required data or context
+
+KEY ASSUMPTIONS
+===============
+
+1. Physical bounds derived from Kokam 740mAh Li-ion pouch cell specifications
+2. EOL threshold = 80% of initial capacity (industry standard)
+3. Temperature bounds 0-50°C allow for chamber (40°C) ± tolerance
+4. SOH calculation uses first characterization cycle as baseline
+5. 2% SOH increase allowed as measurement noise/temperature variation
+6. IQR multiplier = 3 (extreme outlier detection)
+7. Gap detection threshold: 5× median sampling interval
+8. Characterisation cycles occur every 100 drive cycles
+9. All cells started fresh (SOH = 1.0)
+
+VALIDATION NOTES
+================
+
+- Oxford Dataset 1 strengths: dynamic drive cycles, good replication (8 cells)
+- Key limitations: single temperature, no partial cycles/DoD, no calendar aging
+- Designed specifically for EV drive cycle aging studies
+- Not suitable for multi-temperature or partial-state-of-charge research
+- High-quality, clean data with minimal anomalies
+- Outstanding temporal coherence and channel synchronization
