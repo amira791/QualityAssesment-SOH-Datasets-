@@ -1,0 +1,219 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+.wrap { padding: 1rem 0; }
+.top-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 1.5rem; }
+.metric-card { background: #f2f2f2; border-radius: 8px; padding: 10px 14px; border: 1px solid #ddd; }
+.mc-label { font-size: 11px; color: #555; margin-bottom: 4px; font-weight: 600; }
+.mc-val { font-size: 17px; font-weight: 700; }
+.mc-sub { font-size: 11px; color: #333; font-weight: 500; }
+.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.chart-box { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 14px; }
+.chart-title { font-size: 13px; font-weight: 700; color: #111; margin-bottom: 10px; }
+.ds-selector { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1.25rem; }
+.ds-btn { font-size: 11px; padding: 4px 11px; border-radius: 20px; border: 1.5px solid #bbb; background: #f5f5f5; color: #222; cursor: pointer; font-weight: 600; }
+.ds-btn.active { color: #fff; border-color: transparent; }
+.note-box { background: #fffbe6; border: 1px solid #f0c040; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #333; font-weight: 500; line-height: 1.6; }
+.note-box strong { color: #111; }
+</style>
+<div class="wrap">
+  <div class="top-grid" id="summaryCards"></div>
+  <div class="ds-selector" id="dsSelector"></div>
+  <div class="chart-row">
+    <div class="chart-box">
+      <div class="chart-title">Score by criterion dimension (selected vs avg)</div>
+      <div style="position:relative;height:250px;"><canvas id="radarChart"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">Overall quality score — all datasets</div>
+      <div style="position:relative;height:250px;"><canvas id="barChart"></canvas></div>
+    </div>
+  </div>
+  <div class="note-box" id="contextNote"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const DS = ['CALCE','Oxford','MIT–Stanford','SNL','NASA R&R','Guangzhou EV','300-EV'];
+const DS_COLORS = ['#534AB7','#1D9E75','#3266ad','#BA7517','#D4537E','#639922','#7a6f65'];
+
+// Domain context per dataset
+const DS_CONTEXT = [
+  'Lab cells — controlled cycling, single chemistry. Best for benchmarking basic degradation models.',
+  'Lab cells — single chemistry, controlled cycling with impedance data. Good for cell-level model validation.',
+  'Lab cells — fast-charging focus, large cell count. Ideal for fast-charge degradation and cycle-life prediction.',
+  'Lab cells — wide temperature and C-rate range. Strong for cell-level generalization across conditions.',
+  'Lab cells — dynamic profiles and recommissioning. Suitable for second-life and dynamic-use SOH models.',
+  'Real-world EV fleet — thousands of vehicles, diverse pack configurations and usage. Best for fleet-level SOH models.',
+  '300 real-world EVs — diverse pack data, partial cycles, real usage. Strong for real-world deployment and generalization.',
+];
+
+// DIMS must exactly match cat values below
+const DIMS = ['Correctness','Completeness','Anomaly','Representativeness','Balance','Temporal'];
+
+const raw = [
+  { cat:'Correctness',       scores:['+','+','+','+','+','+','+'] },
+  { cat:'Correctness',       scores:['++','++','++','++','++','++','++'] },
+  { cat:'Completeness',      scores:['o','++','++','++','+','+','+'] },
+  { cat:'Completeness',      scores:['++','+','++','++','++','+','+'] },
+  { cat:'Completeness',      scores:['++','++','++','++','++','+','++'] },
+  { cat:'Anomaly',           scores:['+','+','+','+','+','o','+'] },
+  { cat:'Anomaly',           scores:['o','+','o','+','o','+','++'] },
+  { cat:'Anomaly',           scores:['-','++','++','o','-','o','o'] },
+  { cat:'Representativeness',scores:['+','+','++','++','++','++','++'] },
+  { cat:'Representativeness',scores:['-','-','+','++','++','++','++'] },
+  { cat:'Representativeness',scores:['-','+','++','++','++','++','o'] },
+  { cat:'Representativeness',scores:['o','-','-','++','o','++','++'] },
+  { cat:'Representativeness',scores:['o','++','o','o','++','++','++'] },
+  { cat:'Representativeness',scores:['-','-','-','-','-','-','-'] },
+  { cat:'Representativeness',scores:['++','++','++','++','++','++','+'] },
+  { cat:'Balance',           scores:['++','+','+','+','+','++','++'] },
+  { cat:'Balance',           scores:['o','o','o','+','o','+','+'] },
+  { cat:'Balance',           scores:['+','+','+','+','+','o','+'] },
+  { cat:'Temporal',          scores:['++','++','++','+','++','++','++'] },
+  { cat:'Temporal',          scores:['+','++','++','++','+','++','+'] },
+  { cat:'Temporal',          scores:['++','++','++','++','++','++','++'] },
+  { cat:'Temporal',          scores:['+','++','++','+','+','++','++'] },
+];
+
+function toNum(s){ return s==='++'?4:s==='+'?3:s==='o'?2:s==='-'?1:null; }
+
+function dimScore(di, dimName){
+  const rows = raw.filter(r=>r.cat===dimName);
+  const vals = rows.map(r=>toNum(r.scores[di])).filter(v=>v!==null);
+  return vals.length ? Math.round((vals.reduce((a,b)=>a+b,0)/vals.length)*25) : 0;
+}
+
+const dimScores = DS.map((_,di) => DIMS.map(d => dimScore(di,d)));
+const overallScores = DS.map((_,di) => {
+  const all = raw.map(r=>toNum(r.scores[di])).filter(v=>v!==null);
+  return Math.round((all.reduce((a,b)=>a+b,0)/all.length)*25);
+});
+const avgDim = DIMS.map(d => Math.round(DS.map((_,di)=>dimScore(di,d)).reduce((a,b)=>a+b,0)/DS.length));
+
+// Summary cards
+const summaryCards = document.getElementById('summaryCards');
+const sorted = [...overallScores].map((s,i)=>({s,i})).sort((a,b)=>b.s-a.s);
+['🥇 Best overall','🥈 Second','🥉 Third'].forEach((lbl,rank) => {
+  const x = sorted[rank];
+  const card = document.createElement('div');
+  card.className = 'metric-card';
+  card.innerHTML = `<div class="mc-label">${lbl}</div><div class="mc-val" style="color:${DS_COLORS[x.i]}">${DS[x.i]}</div><div class="mc-sub">Score: ${x.s}%</div>`;
+  summaryCards.appendChild(card);
+});
+
+const w = sorted[sorted.length-1];
+const wCard = document.createElement('div');
+wCard.className = 'metric-card';
+wCard.innerHTML = `<div class="mc-label">Lowest overall</div><div class="mc-val" style="color:#D84040">${DS[w.i]}</div><div class="mc-sub">Score: ${w.s}%</div>`;
+summaryCards.appendChild(wCard);
+
+const weakDimIdx = avgDim.indexOf(Math.min(...avgDim));
+const wdCard = document.createElement('div');
+wdCard.className = 'metric-card';
+wdCard.innerHTML = `<div class="mc-label">Weakest dimension (avg)</div><div class="mc-val" style="font-size:13px;color:#D84040">${DIMS[weakDimIdx]}</div><div class="mc-sub">Avg ${avgDim[weakDimIdx]}%</div>`;
+summaryCards.appendChild(wdCard);
+
+const calCard = document.createElement('div');
+calCard.className = 'metric-card';
+calCard.innerHTML = `<div class="mc-label">Universal gap</div><div class="mc-val" style="font-size:13px;color:#D84040">Calendar aging</div><div class="mc-sub">0 / 7 datasets cover it</div>`;
+summaryCards.appendChild(calCard);
+
+// Dataset selector + context note
+let selectedDs = 3; // SNL default
+function updateNote(i){
+  document.getElementById('contextNote').innerHTML =
+    `<strong>📌 ${DS[i]} — Application context:</strong> ${DS_CONTEXT[i]}`;
+}
+
+const dsSelector = document.getElementById('dsSelector');
+DS.forEach((name, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'ds-btn' + (i===selectedDs?' active':'');
+  btn.textContent = name;
+  btn.style.background = i===selectedDs ? DS_COLORS[i] : '#f5f5f5';
+  btn.style.color = i===selectedDs ? '#fff' : '#222';
+  btn.onclick = () => {
+    selectedDs = i;
+    updateRadar();
+    updateNote(i);
+    dsSelector.querySelectorAll('.ds-btn').forEach((b,j)=>{
+      b.classList.toggle('active',j===i);
+      b.style.background = j===i ? DS_COLORS[j] : '#f5f5f5';
+      b.style.color = j===i ? '#fff' : '#222';
+    });
+  };
+  dsSelector.appendChild(btn);
+});
+updateNote(selectedDs);
+
+// Radar chart
+const radarCtx = document.getElementById('radarChart').getContext('2d');
+const radarChart = new Chart(radarCtx, {
+  type: 'radar',
+  data: {
+    labels: DIMS,
+    datasets: [
+      {
+        label: DS[selectedDs],
+        data: dimScores[selectedDs],
+        borderColor: DS_COLORS[selectedDs],
+        backgroundColor: DS_COLORS[selectedDs]+'33',
+        pointBackgroundColor: DS_COLORS[selectedDs],
+        borderWidth: 2, pointRadius: 3
+      },
+      {
+        label: 'Group avg',
+        data: avgDim,
+        borderColor: '#999',
+        backgroundColor: '#99999918',
+        pointBackgroundColor: '#888',
+        borderWidth: 1.5, borderDash: [4,3], pointRadius: 2
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: { r: {
+      min:0, max:100,
+      ticks:{ stepSize:25, font:{size:10}, color:'#444', backdropColor:'transparent' },
+      grid:{ color:'rgba(100,100,100,.2)' },
+      pointLabels:{ font:{size:11, weight:'700'}, color:'#111' }
+    }},
+    plugins: { legend:{ display:true, labels:{ color:'#111', font:{size:11,weight:'600'}, boxWidth:14 } } }
+  }
+});
+
+function updateRadar() {
+  const d = radarChart.data.datasets[0];
+  d.data = dimScores[selectedDs];
+  d.label = DS[selectedDs];
+  d.borderColor = DS_COLORS[selectedDs];
+  d.backgroundColor = DS_COLORS[selectedDs]+'33';
+  d.pointBackgroundColor = DS_COLORS[selectedDs];
+  radarChart.update();
+}
+
+// Bar chart
+const barCtx = document.getElementById('barChart').getContext('2d');
+new Chart(barCtx, {
+  type: 'bar',
+  data: {
+    labels: DS.map(d => d.length>11 ? d.slice(0,11)+'…' : d),
+    datasets: [{
+      label: 'Overall score (%)',
+      data: overallScores,
+      backgroundColor: DS_COLORS,
+      borderWidth: 0, borderRadius: 5
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      y: { min:0, max:100, ticks:{ font:{size:10,weight:'600'}, color:'#333', callback: v=>v+'%' }, grid:{ color:'rgba(100,100,100,.15)' } },
+      x: { ticks:{ font:{size:10,weight:'600'}, color:'#222', autoSkip:false, maxRotation:38 }, grid:{ display:false } }
+    },
+    plugins: { legend:{ display:false } }
+  }
+});
+</script>
